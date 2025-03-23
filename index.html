@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seat Booking</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        .seat {
+            width: 80px;
+            height: 80px;
+            border: 2px solid #333;
+            display: inline-block;
+            text-align: center;
+            line-height: 80px;
+            cursor: pointer;
+            margin: 5px;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+        .available {
+            background-color: green;
+        }
+        .taken {
+            background-color: red;
+            cursor: not-allowed;
+        }
+        .selected {
+            background-color: yellow;
+        }
+        #reserve-btn {
+            margin-top: 20px;
+            padding: 15px 30px;
+            font-size: 18px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        #reserve-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .row {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+        #seats-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="seats-container"></div>
+    <button id="reserve-btn" onclick="reserveSeats()" disabled>Please Select Seats</button>
+
+    <script>
+        let selectedSeats = [];
+        let reservedSeats = [];
+        let reservationInProgress = false;
+
+        fetch('/api/seats')
+            .then(response => response.json())
+            .then(seats => {
+                const container = document.getElementById('seats-container');
+                seats.forEach(seat => {
+                    const seatElement = document.createElement('div');
+                    seatElement.classList.add('seat');
+                    seatElement.classList.add(seat.Status.toLowerCase());
+                    seatElement.textContent = seat.Number;
+
+                    if (seat.Status === 'taken') {
+                        reservedSeats.push(seat.Number);
+                        seatElement.classList.add('taken');
+                    }
+
+                    seatElement.onclick = () => toggleSeatSelection(seat, seatElement);
+                    container.appendChild(seatElement);
+                });
+            });
+
+        function toggleSeatSelection(seat, seatElement) {
+            if (reservationInProgress || seatElement.classList.contains('taken')) {
+                return;
+            }
+
+            if (seat.Status === 'available') {
+                const index = selectedSeats.indexOf(seat.Number);
+                if (index > -1) {
+                    selectedSeats.splice(index, 1);
+                    seatElement.classList.remove('selected');
+                } else {
+                    selectedSeats.push(seat.Number);
+                    seatElement.classList.add('selected');
+                }
+            }
+
+            updateReserveButtonState();
+        }
+
+        function updateReserveButtonState() {
+            const reserveButton = document.getElementById('reserve-btn');
+            if (selectedSeats.length > 0) {
+                reserveButton.disabled = false;
+                reserveButton.textContent = 'Reserve Selected Seats';
+            } else {
+                reserveButton.disabled = true;
+                reserveButton.textContent = 'Please Select Seats';
+            }
+        }
+
+        function reserveSeats() {
+            const seatIds = selectedSeats.map(seat => seat.replace(' ', ''));
+            const reserveButton = document.getElementById('reserve-btn');
+
+            reservationInProgress = true;
+            reserveButton.disabled = true;
+            reserveButton.textContent = 'Reserving...';
+
+            fetch(`http://18.153.80.86:3000/ticket?seatIds=${seatIds.join('&seatIds=')}`, {
+                method: 'PUT',
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Error: ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                alert('Seats reserved successfully');
+                selectedSeats.forEach(seat => {
+                    const seatElement = Array.from(document.querySelectorAll('.seat')).find(seatElement => seatElement.textContent === seat);
+                    seatElement.classList.remove('available', 'selected');
+                    seatElement.classList.add('taken');
+                    reservedSeats.push(seat);  // Add the reserved seat to the reservedSeats array
+                });
+
+                selectedSeats = [];
+                document.querySelectorAll('.seat').forEach(seatElement => {
+                    seatElement.classList.remove('selected');
+                });
+
+                reservationInProgress = false;
+                updateReserveButtonState();
+            })
+            .catch(error => {
+                alert('Error reserving seats');
+                console.error('Error:', error);
+                reservationInProgress = false;
+                updateReserveButtonState();
+            });
+        }
+    </script>
+</body>
+</html>
+
